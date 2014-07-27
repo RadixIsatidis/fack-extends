@@ -5,7 +5,6 @@ fack-extends
 JS的原型链继承的思想非常优秀，但易用性终究没有Java/C++来得好，而且事实上大家都更倾向于使用后者。程序员的世界，简单易用第一。   
 事实上，网上有很多种解决方案提供了类似后者的继承，但是都各有缺陷。要么只是简单的扩展，将父类的方法绑定到子类上，比如各种库的`extends`方法。要么引入整个巨型开发库，更有甚者直接污染JS原生对象。这里点名批评PrototypeJS，虽然我的方法从它那里学来。用这个库，唯一目的就是它的继承帮助函数，然而PrototypeJS本身是个极大的开发库，而且Bug众多，少人维护，污染JS原生对象，还有最重要的$符。   
 另外提一下WinJS，我的另一个灵感来源。在WinJS出来之前我甚至没能想到微软在JS上有如此造诣。WinJS是个非常碉堡的JS开发库，值得一试。但是为了一个继承帮助函数引入一个完整的开发库，这是极不明智的。   
-<!--more-->
    
 好了，话归正题。工欲善其事，必先利其器，首先列举开发目标：   
 1.  简单。这个工程的目的，仅仅是为了一个继承帮助函数，我无意于弄出一个功能复杂难用的工具，这违背我的初衷。工具实现可以很复杂，但保证功能简单易用。   
@@ -33,19 +32,19 @@ Java的类有一个`Class<?>`属性，保存了类的类型信息。摒弃掉各
 5.	闭包   
 闭包的概念或许很少人能理解清楚。这里吐槽一下，一货自称是平安保险前端架构师来面试，要价25-30K，一问闭包是啥，不知。呵呵！   
 参考这个例子：   
-{% codeblock lang:js %}
+```js
 for (var i = 0; i < 10; i++) {
 	someEle.addEventListener('click', function (e) {
 		var k = list[i];
 		...
 	});
 }
-{% endcodeblock %}
+```
 在这个例子中，事件函数里边的k，永远只能拿到`list[10]`，因为`i`是`for`这个闭包维护的变量，`for`执行完之后，`i`的值是10。要让事件函数能够拿到1到9，需要在`for`里边加入立即执行函数，将`i`作为参数，利用这个函数维护一个新的变量，让`i`固化下来。当然，这个例子很傻，更好一点的例子自行Google。   
 
 **提供继承、构造函数、动态绑定、静态绑定**   
 这个方法是从WinJS那里挖来的，帮助函数提供是个参数   
-{% codeblock lang:js %}
+```js
 /**
  * 构造一个类
  * @param _a {*} 父类引用或构造函数
@@ -57,14 +56,14 @@ for (var i = 0; i < 10; i++) {
 module.create = function (_a, _b, _c, _d) {
 	// …
 }
-{% endcodeblock %}
+```
 至此，参数的形式只允许以下两种情况   
 1.	Parent, Constructor, [prototype, [_static]]   
 2.	Constructor, [prototype, [_static]]   
 
 不符合规范的，都会直接导致错误无法执行。事实上，作为弱类型语言，我们通常无法预期用户将会以什么样的形式提供参数。不过对于这事情其实问题不大，参数弄错了程序肯定跑不起来。   
 我们仍然需要做一些参数适配的工作：   
-{% codeblock lang:js %}
+```js
 var bType = typeof _b;
 if ('object' == bType || undefined == _b) {
 	// 当第二个参数是object或未定义时，表明是第二种参数格式
@@ -76,7 +75,7 @@ if ('object' == bType || undefined == _b) {
 _d = _d || {};
 _c = _c || {};
 _b = _b || new Function();
-{% endcodeblock %}
+```
 上边的代码，通过检查参数`_b`来确定如何移动参数位置，以使参数列表尽量符合最长的规则，即把参数填满。注意上边的`_a = Object`，这一来，当如果没有提供需要继承的类时，其就从`Object`继承下来。后边几行是对参数为空时做的默认赋值操作。”`||`”这种方法逼格相当高。之后我会将这几个参数丢到一个闭包(一个立即执行函数)里，通过闭包维护参数的引用，避免JS变量本身带来的一些小问题。   
    
 这样一来，要实现继承只需要做到以下几点：   
@@ -87,7 +86,7 @@ _b = _b || new Function();
 
 **方法和属性的绑定**
 主要靠以下几个方法，静态和动态绑定都可以使用，依次调用它们可以完成绑定，并在方法调用时，附加一个父类实例引用到参数列表末端，自行感受一下：
-{% codeblock lang:js %}
+```js
 /**
  * 制作父类对象引用
  * 基本原理是，深度复制一份父类。为了实现深度复制：
@@ -151,14 +150,14 @@ var _addElements = function (source, target) {
 		}
 	});
 };
-{% endcodeblock %}
+```
 **构造函数**   
 实现构造函数需要注意几点：   
 1.	父类构造函数不能丢。   
 2.	必须是在类被`new`一个实例时自动执行   
 
 仔细看这段代码
-{% codeblock lang:js %}
+```js
 var _constructor = function () {
 	var _args = slice.call(arguments, 0);
 	var $super = parentClass._constructor || new Function();
@@ -166,15 +165,15 @@ var _constructor = function () {
 	_args.push($super);
 	constructor.apply(this, _args);
 };
-{% endcodeblock %}
+```
 通常来说，既然通过闭包维护参数，东西丢进去之后外边就找不到了的。但JS的引用传递很好的解决了这一问题。实际上，在JS中一切皆对象，还是能够自由添加属性的对象。构造子类时，很容易通过父类的`Class`对象获得父类的构造函数。这个函数最后一行中，`constructor`执行时绑定的对象指针式`this`，因为这个函数执行时，函数的`this`应当指向调用它的类。   
 所幸原生的JS是有构造函数这个说法的。在原生的JS构造函数中执行我们定义的构造函数就能完成实例化时执行这一目标，并且还能做到更多，比如动态绑定。
-{% codeblock lang:js %}
+```js
 var _Class = function (){
 	_constructor.apply(this, arguments);
 	…
 }
-{% endcodeblock %}
+```
 事实上执行这个帮助类，最后返回的是这个`_Class`。`_Class`是一个`Function`对象，`new`这个`_Class`会执行这个函数，然后获得一个`Object`。不要理会JS的怪异之处。这个`function`自然就是原生JS的构造函数。我们还要在里边做一些更神奇的事情，比如动态绑定。   
 
 改进的地方还有很多，有想法的欢迎联系，代码在[这里](https://github.com/yanleaon/fack-extends)，只有简单的自测，欢迎帮忙找bug。   
